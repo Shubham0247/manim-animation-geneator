@@ -6,10 +6,14 @@ import os
 import tempfile
 import logging
 import re
+import time
+import uuid
+import threading
 from pathlib import Path
 from typing import Optional
 from fastmcp import FastMCP
 from pydantic import BaseModel
+from core.manim_client.safety import UnsafeCodeError, validate_generated_manim_code
 
 # Initialize FastMCP app
 mcp = FastMCP("Manim Server")
@@ -21,6 +25,9 @@ logger.setLevel(logging.DEBUG)
 file_handler = logging.FileHandler(str(log_file), mode='a')
 file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
 logger.handlers = [file_handler]
+
+# Avoid overlapping renders in the same server process (common in Inspector UI retries).
+_render_lock = threading.Lock()
 
 
 class RenderRequest(BaseModel):
@@ -39,6 +46,28 @@ class RenderResult(BaseModel):
     stdout: Optional[str] = None
 
 
+def _parse_resolution(value: str) -> Optional[str]:
+    """Parse WIDTHxHEIGHT (or WIDTH,HEIGHT) into Manim's -r format."""
+    match = re.fullmatch(r"\s*(\d{2,5})\s*[xX,]\s*(\d{2,5})\s*", value or "")
+    if not match:
+        return None
+
+    width = int(match.group(1))
+    height = int(match.group(2))
+    if width <= 0 or height <= 0:
+        return None
+    return f"{width},{height}"
+
+
+def _normalize_code_input(code: str) -> str:
+    """Normalize incoming code text from Inspector form/JSON inputs."""
+    normalized = (code or "").replace("\r\n", "\n").replace("\r", "\n")
+    # Inspector form fields can send escaped newlines as literal characters.
+    if "\\n" in normalized and "\n" not in normalized:
+        normalized = normalized.replace("\\r\\n", "\n").replace("\\n", "\n").replace("\\t", "\t")
+    return normalized
+
+
 @mcp.tool()
 def render_manim_scene(request: RenderRequest) -> RenderResult:
     """
@@ -50,17 +79,47 @@ def render_manim_scene(request: RenderRequest) -> RenderResult:
     Returns:
         RenderResult with success status and video path
     """
+    acquired = _render_lock.acquire(blocking=False)
+    if not acquired:
+        return RenderResult(
+            success=False,
+            video_path=None,
+            stderr="Another render is already running in this server instance. Wait and retry.",
+            stdout=None,
+        )
+
     try:
         logger.info("=" * 60)
         logger.info("Starting render_manim_scene")
         logger.info(f"scene_name={request.scene_name} quality={request.quality}")
+
+        code_text = _normalize_code_input(request.code)
+
+        try:
+            validate_generated_manim_code(code_text)
+        except UnsafeCodeError as exc:
+            error_message = str(exc)
+            if "invalid syntax line 1" in error_message and "\n" not in code_text:
+                error_message += (
+                    " Hint: if using MCP Inspector form, paste escaped newlines "
+                    "(\\n) in code, or switch to raw JSON args mode."
+                )
+            return RenderResult(
+                success=False,
+                video_path=None,
+                stderr=error_message,
+                stdout=None,
+            )
         
-        # Write code to a persistent temp file (not auto-delete)
-        temp_dir = Path(tempfile.gettempdir()) / "manim_mcp"
-        temp_dir.mkdir(exist_ok=True)
+        # Use a unique run directory to avoid request collisions.
+        temp_root = Path(tempfile.gettempdir()) / "manim_mcp"
+        temp_root.mkdir(exist_ok=True)
+        run_id = f"{int(time.time())}_{uuid.uuid4().hex[:8]}"
+        run_dir = temp_root / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
         
-        temp_script_path = temp_dir / "scene_script.py"
-        temp_script_path.write_text(request.code, encoding="utf-8")
+        temp_script_path = run_dir / "scene_script.py"
+        temp_script_path.write_text(code_text, encoding="utf-8")
         logger.info(f"Wrote script to: {temp_script_path}")
         
         try:
@@ -68,7 +127,7 @@ def render_manim_scene(request: RenderRequest) -> RenderResult:
             scene_name = request.scene_name
             if not scene_name:
                 # Try to extract from code
-                for line in request.code.split('\n'):
+                for line in code_text.split('\n'):
                     if 'class' in line and 'Scene' in line:
                         parts = line.split()
                         for i, part in enumerate(parts):
@@ -95,12 +154,21 @@ def render_manim_scene(request: RenderRequest) -> RenderResult:
                 sys.executable,
                 "-m", "manim",
                 quality_flag,
-                "--renderer", "cairo",
-                "--disable_caching",
-                "--progress_bar", "none",
-                script_path_str,
-                scene_name
             ]
+
+            resolution_arg = _parse_resolution(request.resolution)
+            if resolution_arg:
+                cmd.extend(["-r", resolution_arg])
+
+            cmd.extend(
+                [
+                    "--renderer", "cairo",
+                    "--disable_caching",
+                    "--progress_bar", "none",
+                    script_path_str,
+                    scene_name,
+                ]
+            )
             
             logger.info(f"Running command: {' '.join(cmd)}")
             
@@ -126,7 +194,9 @@ def render_manim_scene(request: RenderRequest) -> RenderResult:
                 text=True,
                 timeout=300,  # 5 minute timeout
                 env=env,
-                cwd=str(temp_dir),  # Run from temp dir for consistent output
+                cwd=str(run_dir),  # Run from run dir for consistent output
+                stdin=subprocess.DEVNULL,
+                close_fds=True,
                 creationflags=creation_flags if sys.platform == "win32" else 0,
             )
             
@@ -150,42 +220,39 @@ def render_manim_scene(request: RenderRequest) -> RenderResult:
                                 logger.info(f"Found video from output: {video_path}")
                                 break
                 
-                # Method 2: Search in media folder (check temp_dir/media first, then cwd/media)
+                # Method 2: Search in this run's media folder.
                 if video_path is None:
-                    quality_dir = {
-                        "low": "480p15",
-                        "medium": "720p30",
-                        "high": "1080p60"
-                    }.get(request.quality.lower(), "720p30")
-                    
-                    script_stem = temp_script_path.stem
-                    
                     search_bases = [
-                        temp_dir / "media" / "videos",
-                        Path.cwd() / "media" / "videos",
+                        run_dir / "media" / "videos" / "scene_script",
+                        run_dir / "media" / "videos",
                     ]
                     
                     for base in search_bases:
                         if base.exists():
-                            # Search for any mp4 file matching the scene name
-                            for mp4_file in base.rglob(f"{scene_name}.mp4"):
-                                video_path = str(mp4_file.resolve())
+                            exact_matches = sorted(
+                                base.rglob(f"{scene_name}.mp4"),
+                                key=lambda p: p.stat().st_mtime,
+                                reverse=True,
+                            )
+                            if exact_matches:
+                                video_path = str(exact_matches[0].resolve())
                                 logger.info(f"Found video by search: {video_path}")
-                                break
-                            if video_path:
                                 break
                     
                     # Method 3: Search more broadly
                     if video_path is None:
                         for base in search_bases:
                             if base.exists():
-                                for mp4_file in base.rglob("*.mp4"):
-                                    # Take the most recently modified mp4
-                                    video_path = str(mp4_file.resolve())
+                                mp4_matches = sorted(
+                                    base.rglob("*.mp4"),
+                                    key=lambda p: p.stat().st_mtime,
+                                    reverse=True,
+                                )
+                                if mp4_matches:
+                                    # Take the most recently modified mp4.
+                                    video_path = str(mp4_matches[0].resolve())
                                     logger.info(f"Found video (fallback): {video_path}")
                                     break
-                            if video_path:
-                                break
             
             success = result.returncode == 0 and video_path is not None
             logger.info(f"Final result: success={success}, video_path={video_path}")
@@ -223,6 +290,9 @@ def render_manim_scene(request: RenderRequest) -> RenderResult:
             stderr=f"Error executing Manim: {str(e)}",
             stdout=None
         )
+    finally:
+        if acquired:
+            _render_lock.release()
 
 
 if __name__ == "__main__":

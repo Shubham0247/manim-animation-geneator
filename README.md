@@ -22,7 +22,7 @@ AI-powered Manim animation generator using LangGraph and MCP (FastMCP). This pro
 ### Prerequisites
 
 - Python 3.11+
-- OpenAI API key
+- OpenAI API key (or Azure OpenAI credentials)
 - Manim installed (will be installed via dependencies)
 
 ### Installation
@@ -43,9 +43,20 @@ uv sync
 cp .env.example .env
 ```
 
-4. Edit `.env` and add your OpenAI API key:
+4. Edit `.env` and configure one provider:
+
+   Option A (OpenAI):
 ```
 OPENAI_API_KEY=your_api_key_here
+OPENAI_MODEL=gpt-4.1-mini
+```
+
+   Option B (Azure OpenAI):
+```
+AZURE_OPENAI_API_KEY=your_azure_openai_api_key_here
+AZURE_OPENAI_ENDPOINT=https://your-resource-name.openai.azure.com
+AZURE_OPENAI_DEPLOYMENT=your-deployment-name
+AZURE_OPENAI_API_VERSION=2024-02-15-preview
 ```
 
 ### Running the Application
@@ -103,7 +114,10 @@ manim_animation_generator/
 ## Configuration
 
 Edit `.env` to customize:
-- `OPENAI_MODEL`: OpenAI model to use (default: gpt-4.1)
+- `OPENAI_MODEL`: Model name (OpenAI) or optional override for Azure deployment
+- `OPENAI_BASE_URL`: Optional custom OpenAI-compatible base URL
+- `AZURE_OPENAI_ENDPOINT`: Azure endpoint (required for Azure mode)
+- `AZURE_OPENAI_DEPLOYMENT`: Azure deployment name (required for Azure mode)
 - `MANIM_OUTPUT_DIR`: Directory for generated videos (default: videos)
 - `MANIM_DEFAULT_QUALITY`: Animation quality - low/medium/high (default: medium)
 - `MAX_RETRIES`: Maximum retry attempts for error fixing (default: 3)
