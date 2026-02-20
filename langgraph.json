@@ -1,0 +1,7 @@
+{
+    "graphs": {
+      "manim_generator": "./graph_entrypoint.py:graph"
+    },
+    "dependencies": ["."],
+    "env": ".env"
+  }
