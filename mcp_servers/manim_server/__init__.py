@@ -1,1 +1,0 @@
-"""Manim MCP server."""

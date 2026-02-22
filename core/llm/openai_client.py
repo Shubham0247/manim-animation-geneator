@@ -1,5 +1,3 @@
-"""OpenAI LLM client wrapper for LangGraph nodes."""
-
 import ast
 import logging
 import re
@@ -25,8 +23,6 @@ logger = logging.getLogger(__name__)
 
 
 class OpenAILLMClient:
-    """Single-responsibility class for OpenAI API interactions."""
-    
     def __init__(self):
         azure_enabled = bool(settings.azure_openai_endpoint and settings.azure_openai_deployment)
 
@@ -47,7 +43,6 @@ class OpenAILLMClient:
             self.model = settings.openai_model or "gpt-4.1-mini"
     
     def refine_prompt(self, user_request: UserRequest) -> RefinedRequest:
-        """Refine and clarify the user's prompt for better Manim code generation."""
         prompt = refine_prompt_text(user_request.prompt)
 
         response = self.client.chat.completions.create(
@@ -68,7 +63,6 @@ class OpenAILLMClient:
         )
     
     def generate_manim_code(self, refined: RefinedRequest) -> ManimCode:
-        """Generate Manim Python code from refined description."""
         prompt = generate_code_prompt(
             original_prompt=refined.original_prompt,
             refined_description=refined.refined_description,
@@ -98,7 +92,6 @@ class OpenAILLMClient:
         error_message: str,
         refined: RefinedRequest
     ) -> ManimCode:
-        """Fix Manim code based on error message."""
         prompt = fix_code_prompt(
             original_prompt=refined.original_prompt,
             refined_description=refined.refined_description,
@@ -221,7 +214,6 @@ class OpenAILLMClient:
 
     @staticmethod
     def _strip_code_fences(code: str) -> str:
-        """Strip markdown code fences if present."""
         if code.startswith("```python"):
             code = code[9:]
         elif code.startswith("```"):
@@ -232,7 +224,6 @@ class OpenAILLMClient:
 
     @staticmethod
     def _extract_scene_name(code: str) -> str | None:
-        """Extract first Scene class name from generated code."""
         for line in code.split("\n"):
             if "class" in line and "Scene" in line:
                 parts = line.split()
@@ -243,7 +234,6 @@ class OpenAILLMClient:
 
     @staticmethod
     def _get_syntax_error(code: str) -> str | None:
-        """Return syntax error text if code is invalid, else None."""
         try:
             ast.parse(code)
             return None

@@ -1,5 +1,3 @@
-"""Configuration management using Pydantic Settings."""
-
 from pathlib import Path
 from typing import Optional
 from pydantic import AliasChoices, Field, model_validator
@@ -7,8 +5,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Application settings loaded from environment variables."""
-
     # OpenAI (non-Azure) configuration
     openai_api_key: Optional[str] = Field(default=None, validation_alias=AliasChoices("OPENAI_API_KEY"))
     openai_base_url: Optional[str] = Field(default=None, validation_alias=AliasChoices("OPENAI_BASE_URL"))

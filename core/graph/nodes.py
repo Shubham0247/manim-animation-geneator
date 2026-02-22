@@ -1,5 +1,3 @@
-"""LangGraph node functions (Single Responsibility Principle)."""
-
 import logging
 from core.graph.state import GraphState
 from core.models import RefinedRequest, ManimCode, ManimExecutionResult
@@ -16,7 +14,6 @@ _manim_executor = MCPManimExecutor()
 
 
 def refine_node(state: GraphState) -> GraphState:
-    """Refine user prompt into detailed description."""
     logger.info("🔄 Step 1/4: Refining user prompt...")
     print("🔄 Step 1/4: Refining user prompt...")
     
@@ -30,7 +27,6 @@ def refine_node(state: GraphState) -> GraphState:
 
 
 def generate_manim_code_node(state: GraphState) -> GraphState:
-    """Generate Manim Python code from refined description."""
     logger.info("💻 Step 2/4: Generating Manim code...")
     print("💻 Step 2/4: Generating Manim code...")
     
@@ -44,7 +40,6 @@ def generate_manim_code_node(state: GraphState) -> GraphState:
 
 
 def run_manim_node(state: GraphState) -> GraphState:
-    """Execute Manim code via MCP executor."""
     retry_count = state.get("retries", 0)
     step_num = 3 if retry_count == 0 else f"3.{retry_count + 1}"
     
@@ -69,7 +64,6 @@ def run_manim_node(state: GraphState) -> GraphState:
 
 
 def fix_manim_code_node(state: GraphState) -> GraphState:
-    """Fix Manim code based on error message."""
     retry_num = state.get("retries", 0) + 1
     logger.info(f"🔧 Step 3.{retry_num}/4: Fixing Manim code (Attempt {retry_num})...")
     print(f"🔧 Step 3.{retry_num}/4: Fixing Manim code (Attempt {retry_num})...")
@@ -90,7 +84,6 @@ def fix_manim_code_node(state: GraphState) -> GraphState:
 
 
 def should_retry(state: GraphState) -> str:
-    """Conditional edge function: decide whether to retry or end."""
     execution = state.get("execution")
     retries = state.get("retries", 0)
     

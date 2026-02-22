@@ -1,5 +1,3 @@
-"""Streamlit UI for Manim Animation Generator."""
-
 import streamlit as st
 import time
 from core.graph.builder import build_graph
@@ -9,7 +7,6 @@ from pathlib import Path
 
 
 def main():
-    """Main Streamlit application."""
     st.set_page_config(
         page_title="Manim Animation Generator",
         page_icon="🎬",
@@ -49,7 +46,6 @@ def main():
             log_messages = []
             
             def update_log(message: str):
-                """Add a message to the log and update the display."""
                 log_messages.append(message)
                 log_display = "\n".join(log_messages[-10:])
                 log_area.text_area("📋 Progress Log", value=log_display, height=150, disabled=True)

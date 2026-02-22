@@ -1,5 +1,3 @@
-"""MCP client implementation for Manim execution using FastMCP."""
-
 import asyncio
 import os
 import re
@@ -25,15 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 class MCPManimExecutor(IManimExecutor):
-    """Manim executor implementation backed by FastMCP tool calls."""
-
     def __init__(self, mcp_server_path: Optional[str] = None):
-        """
-        Initialize Manim executor.
-
-        Args:
-            mcp_server_path: Path to the MCP server script.
-        """
         if mcp_server_path is None:
             project_root = Path(__file__).parent.parent.parent
             self.mcp_server_path = project_root / "mcp_servers" / "manim_server" / "main.py"
@@ -67,7 +57,6 @@ class MCPManimExecutor(IManimExecutor):
             return self._execute_direct(code)
 
     def _execute_via_mcp(self, code: ManimCode) -> ManimExecutionResult:
-        """Execute by calling render_manim_scene through FastMCP client."""
         scene_name = code.scene_name or self._extract_scene_name(code.code)
         request_payload = {
             "code": code.code,
@@ -86,7 +75,6 @@ class MCPManimExecutor(IManimExecutor):
         return self._parse_mcp_tool_result(tool_result)
 
     async def _call_render_tool(self, request_payload: dict[str, Any], timeout: int):
-        """Call render_manim_scene on the FastMCP server."""
         from mcp_servers.manim_server.main import mcp as manim_mcp_server
 
         async with Client(
@@ -211,7 +199,6 @@ class MCPManimExecutor(IManimExecutor):
 
     @staticmethod
     def _extract_scene_name(code_text: str) -> str:
-        """Extract first Scene subclass name from code."""
         for line in code_text.split("\n"):
             if "class" in line and "Scene" in line:
                 parts = line.split()

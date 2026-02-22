@@ -1,5 +1,3 @@
-"""LangGraph builder: constructs the workflow graph."""
-
 from langgraph.graph import StateGraph, END
 from core.graph.state import GraphState
 from core.graph.nodes import (
@@ -12,8 +10,6 @@ from core.graph.nodes import (
 
 
 def build_graph() -> StateGraph:
-    """Build and compile the LangGraph workflow."""
-    
     # Create graph
     workflow = StateGraph(GraphState)
     

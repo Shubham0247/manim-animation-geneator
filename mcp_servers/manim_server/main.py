@@ -31,7 +31,6 @@ _render_lock = threading.Lock()
 
 
 class RenderRequest(BaseModel):
-    """Request model for rendering Manim code."""
     code: str
     scene_name: Optional[str] = None
     quality: str = "medium"  # low, medium, high
@@ -39,7 +38,6 @@ class RenderRequest(BaseModel):
 
 
 class RenderResult(BaseModel):
-    """Result model for Manim rendering."""
     success: bool
     video_path: Optional[str] = None
     stderr: Optional[str] = None
@@ -70,15 +68,7 @@ def _normalize_code_input(code: str) -> str:
 
 @mcp.tool()
 def render_manim_scene(request: RenderRequest) -> RenderResult:
-    """
-    Render a Manim scene from Python code.
-    
-    Args:
-        request: RenderRequest containing code, scene_name, quality, and resolution
-        
-    Returns:
-        RenderResult with success status and video path
-    """
+    """Validate, render, and locate the output video for a Manim scene request."""
     acquired = _render_lock.acquire(blocking=False)
     if not acquired:
         return RenderResult(
